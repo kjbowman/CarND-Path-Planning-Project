@@ -9,6 +9,26 @@
 using std::string;
 using std::vector;
 
+const double max_accel = 10.0;              // [m/s^2]
+const double max_jerk = 10.0;               // [m/s^3]
+const double max_lane_change_time = 3.0;    // [s]
+const unsigned PATH_BUFFER_SIZE = 50;
+const double spaced_dist = 30.0;
+const double lane_width = 4.0;
+const double m_per_s = 1609.3 / 3600;
+const double update_rate = 50;  // Hz
+const double following_gap = 30.0;
+const double speed_limit = 50.0;
+
+const int SF_ID = 0;
+const int SF_X = 1;
+const int SF_Y = 2;
+const int SF_VX = 3;
+const int SF_VY = 4;
+const int SF_S = 5;
+const int SF_D = 6;
+
+
 // Checks if the SocketIO event has JSON data.
 // If there is data the JSON object in string format will be returned,
 //   else the empty string "" will be returned.
@@ -33,6 +53,7 @@ string hasData(string s) {
 constexpr double pi() { return M_PI; }
 double deg2rad(double x) { return x * pi() / 180; }
 double rad2deg(double x) { return x * 180 / pi(); }
+double magnitude(double x, double y) { return sqrt(x*x + y*y); }
 
 // Calculate distance between two points
 double distance(double x1, double y1, double x2, double y2) {
@@ -154,4 +175,17 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s,
   return {x,y};
 }
 
+// convert speed in mph to a distance increment, based on 50Hz update rate
+double mph_to_increment(double mph) {
+  return mph * m_per_s / update_rate;
+}
+
+// get the d-coordinate of the center of lane for a given lane
+double lane_center(int lane) {
+  return lane_width * ((double)lane + 0.5);
+}
+
+int which_lane(double d) {
+  return (int)(d / lane_width);
+}
 #endif  // HELPERS_H
