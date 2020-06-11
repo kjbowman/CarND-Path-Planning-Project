@@ -9,17 +9,35 @@
 using std::string;
 using std::vector;
 
-const double max_accel = 10.0;              // [m/s^2]
-const double max_jerk = 10.0;               // [m/s^3]
-const double max_lane_change_time = 3.0;    // [s]
-const unsigned PATH_BUFFER_SIZE = 50;
-const double spaced_dist = 30.0;
-const double lane_width = 4.0;
-const double m_per_s = 1609.3 / 3600;
-const double update_rate = 50;  // Hz
-const double following_gap = 30.0;
-const double speed_limit = 50.0;
 
+// simulator/model parameters
+const unsigned N_LANES = 3;
+const unsigned LEFT_LANE = 0;           // midside lane
+const unsigned RIGHT_LANE = N_LANES-1;  // outside lane
+const double LANE_WIDTH = 4.0;          // [m]
+const double UPDATE_RATE = 50;          // [Hz]
+
+// conversion constants
+const double METERS_PER_MILE = 1609.3;
+const double SECONDS_PER_HOUR = 3600;
+
+// project constraints
+const double ROAD_SPEED_LIMIT = 50.0;
+const double MAX_ACCEL = 10.0;          // [m/s^2]
+const double MAX_JERK = 10.0;           // [m/s^3]
+const double MAX_LANE_CHANGE_TIME = 3.0;  // [s]
+
+// constants for tuning the algorithm
+const int PATH_BUFFER_SIZE = 30;  // 50
+const int NUM_SPLINE_PTS = 4;
+const double SPLINE_PTS_SPACING = 30.0;   // [m]
+const double CAR_LENGTH = 5.0;            // [m] (a guess based on avg car length)
+const double FOLLOWING_GAP = CAR_LENGTH * 3;        // [m]
+const double CUTIN_GAP = CAR_LENGTH * 2;            // [m]
+const double SPEED_LIMIT = ROAD_SPEED_LIMIT - 0.5;  // [mph]
+const double SPEED_INCREMENT = 0.25;      // [mph/update_rate]
+
+// Sensor fusion list indexes
 const int SF_ID = 0;
 const int SF_X = 1;
 const int SF_Y = 2;
@@ -28,6 +46,7 @@ const int SF_VY = 4;
 const int SF_S = 5;
 const int SF_D = 6;
 
+enum class BehaviorState { KL, LCL, LCR, PLCL, PLCR };
 
 // Checks if the SocketIO event has JSON data.
 // If there is data the JSON object in string format will be returned,
@@ -53,6 +72,7 @@ string hasData(string s) {
 constexpr double pi() { return M_PI; }
 double deg2rad(double x) { return x * pi() / 180; }
 double rad2deg(double x) { return x * 180 / pi(); }
+// compute the magnitude of a resultant vector
 double magnitude(double x, double y) { return sqrt(x*x + y*y); }
 
 // Calculate distance between two points
@@ -177,15 +197,188 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s,
 
 // convert speed in mph to a distance increment, based on 50Hz update rate
 double mph_to_increment(double mph) {
-  return mph * m_per_s / update_rate;
+  return mph * (METERS_PER_MILE/SECONDS_PER_HOUR) / UPDATE_RATE;
 }
 
 // get the d-coordinate of the center of lane for a given lane
 double lane_center(int lane) {
-  return lane_width * ((double)lane + 0.5);
+  return LANE_WIDTH * ((double)lane + 0.5);
 }
 
 int which_lane(double d) {
-  return (int)(d / lane_width);
+  return (int)(d / LANE_WIDTH);
 }
+
+class TrackedObject {
+public:
+  int id;
+  double x, y;
+  double vx, vy;
+  double s, d;
+  
+  TrackedObject() : id(-1), x(0.0), y(0.0), vx(0.0), vy(0.0), s(0.0), d(0.0) {};
+  ~TrackedObject() {};
+
+  double speed() const { return magnitude(vx, vy); }
+  int lane() const { return which_lane(d); }
+  double projected_s(int n_samples) {
+    return  s + (n_samples * speed() / UPDATE_RATE);
+  }
+};
+
+int intended_lane(BehaviorState state) {
+  int lane = 0;
+  switch(state) {
+    case BehaviorState::PLCL:
+    case BehaviorState::LCL:
+    lane = -1;
+    break;
+
+    case BehaviorState::PLCR:
+    case BehaviorState::LCR:
+    lane = 1;
+    break;
+  }
+
+  return lane;
+}
+
+int final_lane(BehaviorState state) {
+  int lane = 0;
+  switch(state) {
+    case BehaviorState::LCL:
+    lane = -1;
+    break;
+
+    case BehaviorState::LCR:
+    lane = 1;
+    break;
+  }
+
+  return lane;
+}
+
+// adapted from "Implement a Second Cost Function in C++" lesson
+// target_speed: desired speed (i.e. near speed limit)
+// intended_lane: intendend lane for the given behavior (PLCL/R, LCL/R => one lane over) 
+// final_lane: immediate resulting lane of the behavior. LCL/R => one lane over
+// lane_speeds: vector of lane speeds , based on sensed traffic
+float inefficiency_cost(double target_speed, int intended_lane, int final_lane,
+                          const vector<double>& lane_speeds) {
+  float intended_delta_speed = target_speed - lane_speeds[intended_lane];
+  float final_delta_speed = target_speed - lane_speeds[final_lane];
+
+  // float cost = 1 - exp(-fabs(intended_delta_speed + final_delta_speed));
+  float cost = (intended_delta_speed + final_delta_speed) / target_speed;
+  
+  return cost;
+}
+
+float collision_cost(double ego_s, int ego_lane, double ego_speed, int desired_lane,
+                     vector<TrackedObject> tracked_objects, int path_size) {
+  float cost = 0.0;
+  double forward_distance = FOLLOWING_GAP;
+  double rear_distance = CUTIN_GAP;
+  // see if any vehicles are within collision range in desired_lane
+  for(auto& obj : tracked_objects) {
+    if(obj.lane() == desired_lane) {
+      double object_s = obj.projected_s(path_size);
+      double distance = object_s - ego_s;
+      if((distance > 0) && (distance < forward_distance)) {
+        forward_distance = distance;
+      } else if((distance < 0) && (-distance < rear_distance)) {
+        rear_distance = distance;
+      }
+    }
+
+    if((forward_distance < CAR_LENGTH) || (rear_distance < CAR_LENGTH)) {
+      cost = 1.0;
+    } else {
+      float forward_cost = 1.0 - forward_distance / (FOLLOWING_GAP);
+      float rear_cost = 1.0 - rear_distance / (CUTIN_GAP);
+      cost = (forward_cost + rear_cost) / 2.0;
+    }
+  }
+
+  return cost;
+}
+
+float congestion_cost(double ego_s, int lane,
+                       const vector<TrackedObject> tracked_objects) {
+  float cost = 0.0;
+  double distance = 1000;
+  // find closest object in front of ego in ego's lane and in the desired lane
+  for(auto& obj : tracked_objects) {
+    if(obj.lane() == lane) {
+      if((obj.s > ego_s) and (obj.s - ego_s < distance)) {
+        distance = obj.s - ego_s;
+      }
+    }
+  
+    cost = 1 / distance;
+  }
+
+  return cost;
+}
+
+vector<BehaviorState> successor_states(BehaviorState current_state, int lane) {
+  vector<BehaviorState> next_states {BehaviorState::KL};  // KL is always possible next state
+
+  switch(current_state) {
+    case BehaviorState::KL:
+    // next_states.push_back(BehaviorState::PLCL);
+    // next_states.push_back(BehaviorState::PLCR);
+    if(lane != LEFT_LANE) {
+      next_states.push_back(BehaviorState::LCL);
+    }
+    if(lane != RIGHT_LANE) {
+      next_states.push_back(BehaviorState::LCR);
+    }
+    break;
+
+    case BehaviorState::LCL:
+    if(lane != LEFT_LANE) {
+      next_states.push_back(BehaviorState::LCL);
+    }
+    break;
+
+    case BehaviorState::LCR:
+    if(lane != RIGHT_LANE) {
+      next_states.push_back(BehaviorState::LCR);
+    }
+    break;
+
+    case BehaviorState::PLCL:
+    if(lane != LEFT_LANE) {
+      next_states.push_back(BehaviorState::PLCL);
+      next_states.push_back(BehaviorState::LCL);
+    }
+    break;
+
+    case BehaviorState::PLCR:
+    if(lane != RIGHT_LANE) {
+      next_states.push_back(BehaviorState::PLCR);
+      next_states.push_back(BehaviorState::LCR);
+    }
+    break;
+
+    default:
+    break;
+  }
+
+  return next_states;
+}
+
+string print_state(BehaviorState state) {
+  string out = "?";
+  switch(state) {
+    case BehaviorState::KL:   out = "KL";   break;
+    case BehaviorState::PLCL: out = "PLCL"; break;
+    case BehaviorState::PLCR: out = "PLCR"; break;
+    case BehaviorState::LCL:  out = "LCL";  break;
+    case BehaviorState::LCR:  out = "LCR";  break;
+  }
+  return out;
+}
+
 #endif  // HELPERS_H

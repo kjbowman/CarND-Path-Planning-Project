@@ -3,6 +3,8 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <numeric>    // std::accumlate
+#include <cfloat>     // FLT_MAX
 #include "Eigen-3.3/Eigen/Core"
 #include "Eigen-3.3/Eigen/QR"
 #include "helpers.h"
@@ -13,8 +15,6 @@
 using nlohmann::json;
 using std::string;
 using std::vector;
-
-
 
 int main() {
   uWS::Hub h;
@@ -53,15 +53,13 @@ int main() {
     map_waypoints_dy.push_back(d_y);
   }
 
-  // lanes are 0 (left-most lane), 1 (middle lane), 2 (right lane)
-  // we start in the middle lane
-  int lane = 1;
+  // initial car variables
+  double car_goal_speed = 0;   // target velocity [mph]
+  BehaviorState car_state = BehaviorState::KL;  // state for FSM
 
-  // target velocity
-  double target_speed = 0;   // [mph]
-  
-  h.onMessage([&target_speed, &map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
-               &map_waypoints_dx,&map_waypoints_dy, &lane]
+  // this huge "lambda" function is the "main loop"
+  h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
+               &map_waypoints_dx,&map_waypoints_dy, &car_goal_speed, &car_state]
               (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
@@ -86,6 +84,7 @@ int main() {
           double car_d = j[1]["d"];
           double car_yaw = j[1]["yaw"];
           double car_speed = j[1]["speed"];
+          int car_lane = which_lane(car_d);
 
           // Previous path data given to the Planner
           auto previous_path_x = j[1]["previous_path_x"];
@@ -97,8 +96,18 @@ int main() {
           // Sensor Fusion Data, a list of all other cars on the same side 
           //   of the road.
           auto sensor_fusion = j[1]["sensor_fusion"];
-
-          json msgJson;
+          vector<TrackedObject> tracked_objects;
+          for(auto& object : sensor_fusion) {
+            TrackedObject obj;
+            obj.id = object[SF_ID];
+            obj.x = object[SF_X];
+            obj.y = object[SF_Y];
+            obj.vx = object[SF_VX];
+            obj.vy = object[SF_VY];
+            obj.s = object[SF_S];
+            obj.d = object[SF_D];
+            tracked_objects.push_back(obj);
+          }
 
           vector<double> ptsx;
           vector<double> ptsy;
@@ -111,36 +120,88 @@ int main() {
 
           if(prev_size > 0) {
             car_s = end_path_s;
+            car_lane = which_lane(end_path_d);
           }
 
           bool too_close = false;
 
           // check cars around us
-          for(int i = 0; i < sensor_fusion.size(); ++i) {
-            float d = sensor_fusion[i][SF_D];
-            // check if this car is in our lane
-            if(which_lane(d) == lane) {
-              double vx = sensor_fusion[i][SF_VX];
-              double vy = sensor_fusion[i][SF_VY];
-              double others_speed = magnitude(vx, vy);
-              double others_s = sensor_fusion[i][SF_S];
-
-              others_s += prev_size * others_speed / update_rate;
-
-              if((others_s > car_s) && (others_s - car_s < following_gap)) {
+          vector<vector<double>> object_speeds(N_LANES);
+          
+          for(auto& obj : tracked_objects) {
+            // compute average speed of each lane from detected targets
+            if(obj.d < 0)
+              continue;
+            // we only care about objects directly around us (next to and ahead)
+            // object distance, projected out in time to match end of our path
+            double object_speed = obj.speed();
+            double object_s = obj.projected_s(prev_size);
+            if((object_s > car_s - CUTIN_GAP) /* && (object_s < car_s + 75.0) */) {
+              int object_lane = obj.lane();
+              object_speeds[object_lane].push_back(object_speed);
+              if((object_lane == car_lane)
+                  && (object_s > car_s)
+                  && (object_s - car_s < FOLLOWING_GAP)) {
                 too_close = true;
               }
             }
           }
 
-          if(too_close) {
-            target_speed -= 0.8;
+          // compute average speed of all detected object vehicles in each lane
+          vector<double> lane_speeds(N_LANES);
+          for(int lane = 0; lane < N_LANES; lane++) {
+            if(object_speeds[lane].empty()) {
+              lane_speeds[lane] = SPEED_LIMIT;
+            } else {
+              // compute average speed from all objects in lane
+              lane_speeds[lane] = std::accumulate(object_speeds[lane].begin(),
+                                                 object_speeds[lane].end(), 0)
+                                 / object_speeds[lane].size();
+            }
           }
-          else if(target_speed < speed_limit - 1.0) {
-            target_speed += 0.8;
+          
+          // Control acceleration (smooth transition between set speeds)
+          if(too_close) {   // slow down
+            car_goal_speed -= SPEED_INCREMENT;
+          } else if(car_goal_speed < SPEED_LIMIT) {
+            car_goal_speed += SPEED_INCREMENT;  // speed up to speed limit
           }
 
-          // if the previous path list is almost empty, use current car state
+          // determine best path to plan
+          vector<BehaviorState> next_states = successor_states(car_state, car_lane);
+          float best_cost = FLT_MAX;
+          BehaviorState best_state = car_state;
+          for(auto& state : next_states) {
+            // cost based on lane speeds
+            float speed_cost = inefficiency_cost(SPEED_LIMIT,
+                                                car_lane + intended_lane(state),
+                                                car_lane + final_lane(state), 
+                                                lane_speeds);
+            // cost based on collision risk
+            float crash_cost = collision_cost(car_s, car_lane, car_speed,
+                                              car_lane + final_lane(state),
+                                              tracked_objects, prev_size);
+            // cost based on (inverse of) free space in desired final lane
+            float crowding_cost = congestion_cost(car_s,
+                                                  car_lane + final_lane(state),
+                                                  tracked_objects);
+            float cost = speed_cost * pow(10, 6)
+                       + crash_cost * pow(10, 8)
+                       + crowding_cost * pow(10, 5);
+            
+            if(cost < best_cost) {
+              best_cost = cost;
+              best_state = state;
+            }
+          }
+          // std::cout << "best cost: " << best_cost
+          //           << "\t" << print_state(car_state) << "\t->\t" << print_state(best_state)
+          //           << std::endl;
+          car_state = best_state;
+
+          // BEGIN Path Planning
+
+          // if the previous path list is almost empty, use current car position/pose
           if(prev_size < 2) {
             // use 2 pts for path tangent to car angle
             double prev_car_x = car_x - cos(car_yaw);
@@ -151,7 +212,9 @@ int main() {
 
             ptsy.push_back(prev_car_y);
             ptsy.push_back(car_y);
-          } else {  // use previous path's end point
+          }
+          else
+          {  // use previous path's end point
             ref_x = previous_path_x[prev_size-1];
             ref_y = previous_path_y[prev_size-1];
 
@@ -166,10 +229,10 @@ int main() {
             ptsy.push_back(ref_y);
           }
 
-          // add 3 evenly space points ahead, in frenet coordinates
-          for(int i = 0; i < 3; ++i) {
-            vector<double> next_wp = getXY(car_s + (i+1)*spaced_dist,
-                                          lane_center(lane),
+          // add some evenly spaced points ahead, in frenet coordinates
+          for(int i = 0; i < NUM_SPLINE_PTS; ++i) {
+            vector<double> next_wp = getXY(car_s + (i+1)*SPLINE_PTS_SPACING,
+                                          lane_center(car_lane + final_lane(car_state)),
                                           map_waypoints_s,
                                           map_waypoints_x,
                                           map_waypoints_y);
@@ -184,42 +247,40 @@ int main() {
             ptsy[i] = shift_x * sin(-ref_yaw) + shift_y * cos(-ref_yaw);
           }
 
-          tk::spline spln;
+          // create a spline path connecting those points
+          tk::spline spline;
+          spline.set_points(ptsx, ptsy);
 
-          spln.set_points(ptsx, ptsy);
+          // new path starting with unused points from previous path
+          vector<double> next_x_vals(previous_path_x.begin(), previous_path_x.end());
+          vector<double> next_y_vals(previous_path_y.begin(), previous_path_y.end());
 
-          vector<double> next_x_vals;
-          vector<double> next_y_vals;
-
-          for(int i = 0; i < previous_path_x.size(); ++i) {
-            next_x_vals.push_back(previous_path_x[i]);
-            next_y_vals.push_back(previous_path_y[i]);
-          }
-
-          double target_x = spaced_dist;
-          double target_y = spln(target_x);
+          // fill in remaining path points with interpolated spline
+          double target_x = SPLINE_PTS_SPACING;
+          double target_y = spline(target_x);
           double target_dist = magnitude(target_x, target_y);
           double x_add_on = 0;
 
-          for (int i = 0; i < PATH_BUFFER_SIZE - previous_path_x.size(); ++i) {
-            double N = target_dist / mph_to_increment(target_speed);
-            double x_point = x_add_on + target_x/N;
-            double y_point = spln(x_point);
+          for(int i = 0; i < PATH_BUFFER_SIZE - previous_path_x.size(); ++i) {
+            double N = target_dist / mph_to_increment(car_goal_speed);
+            double x_point = x_add_on + target_x / N;
+            double y_point = spline(x_point);
 
             x_add_on = x_point;
 
             double x_ref = x_point;
             double y_ref = y_point;
             
-            x_point = x_ref * cos(ref_yaw) - y_ref * sin(ref_yaw);
-            y_point = x_ref * sin(ref_yaw) + y_ref * cos(ref_yaw);
-
-            x_point += ref_x;
-            y_point += ref_y;
+            x_point = ref_x + x_ref * cos(ref_yaw) - y_ref * sin(ref_yaw);
+            y_point = ref_y + x_ref * sin(ref_yaw) + y_ref * cos(ref_yaw);
 
             next_x_vals.push_back(x_point);
             next_y_vals.push_back(y_point);
           }
+
+          // END of path planning - the rest is execution
+
+          json msgJson;
 
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
