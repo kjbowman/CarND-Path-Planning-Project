@@ -11,6 +11,10 @@
 #include "json.hpp"
 #include "spline.h"
 
+#include "parameters.h"
+#include "vehicle.h"
+#include "cost.h"
+
 // for convenience
 using nlohmann::json;
 using std::string;
@@ -54,12 +58,13 @@ int main() {
   }
 
   // initial car variables
-  double car_goal_speed = 0;   // target velocity [mph]
-  BehaviorState car_state = BehaviorState::KL;  // state for FSM
+  Vehicle ego;
+  // double car_goal_speed = 0;   // target velocity [mph]
+  // BehaviorState car_state = BehaviorState::KL;  // state for FSM
 
   // this huge "lambda" function is the "main loop"
-  h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
-               &map_waypoints_dx,&map_waypoints_dy, &car_goal_speed, &car_state]
+  h.onMessage([&ego, &map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
+               &map_waypoints_dx,&map_waypoints_dy]
               (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
@@ -77,15 +82,10 @@ int main() {
         if (event == "telemetry") {
           // j[1] is the data JSON object
           
-          // Main car's localization Data
-          double car_x = j[1]["x"];
-          double car_y = j[1]["y"];
-          double car_s = j[1]["s"];
-          double car_d = j[1]["d"];
-          double car_yaw = j[1]["yaw"];
-          double car_speed = j[1]["speed"];
-          int car_lane = which_lane(car_d);
-
+          // Ego vehicle's position, pose, and speed "now" (this loop)
+          ego.update(j[1]["x"], j[1]["y"], j[1]["s"], j[1]["d"],
+                     j[1]["yaw"], j[1]["speed"]);
+          
           // Previous path data given to the Planner
           auto previous_path_x = j[1]["previous_path_x"];
           auto previous_path_y = j[1]["previous_path_y"];
@@ -93,125 +93,81 @@ int main() {
           double end_path_s = j[1]["end_path_s"];
           double end_path_d = j[1]["end_path_d"];
 
-          // Sensor Fusion Data, a list of all other cars on the same side 
-          //   of the road.
+          // Sensor Fusion Data: list of other cars on the same side of the road
           auto sensor_fusion = j[1]["sensor_fusion"];
-          vector<TrackedObject> tracked_objects;
-          for(auto& object : sensor_fusion) {
-            TrackedObject obj;
-            obj.id = object[SF_ID];
-            obj.x = object[SF_X];
-            obj.y = object[SF_Y];
-            obj.vx = object[SF_VX];
-            obj.vy = object[SF_VY];
-            obj.s = object[SF_S];
-            obj.d = object[SF_D];
+          vector<Vehicle> tracked_objects;
+          for(auto& sf : sensor_fusion) {
+            Vehicle obj(sf[SF_ID],
+                        sf[SF_X], sf[SF_Y], sf[SF_S], sf[SF_D],
+                        0,        // yaw is unknown, assume 0
+                        magnitude(sf[SF_VX], sf[SF_VY]));
+            obj.projected_s = obj.s;
             tracked_objects.push_back(obj);
           }
 
           vector<double> ptsx;
           vector<double> ptsy;
 
-          double ref_x = car_x;
-          double ref_y = car_y;
-          double ref_yaw = deg2rad(car_yaw);
+          double ref_x = ego.x;
+          double ref_y = ego.y;
+          double ref_yaw = deg2rad(ego.yaw);
 
           int prev_size = previous_path_x.size();
 
           if(prev_size > 0) {
-            car_s = end_path_s;
-            car_lane = which_lane(end_path_d);
+            ego.projected_s = end_path_s;
+            ego.projected_d = end_path_d;
+            ego.projected_lane = which_lane(end_path_d);
+          
+            for(auto& obj : tracked_objects) {
+              obj.projected_s += (prev_size * obj.speed / UPDATE_RATE);
+            }
           }
 
           bool too_close = false;
 
-          // check cars around us
-          vector<vector<double>> object_speeds(N_LANES);
-          
-          for(auto& obj : tracked_objects) {
-            // compute average speed of each lane from detected targets
-            if(obj.d < 0)
-              continue;
-            // we only care about objects directly around us (next to and ahead)
-            // object distance, projected out in time to match end of our path
-            double object_speed = obj.speed();
-            double object_s = obj.projected_s(prev_size);
-            if((object_s > car_s - CUTIN_GAP) /* && (object_s < car_s + 75.0) */) {
-              int object_lane = obj.lane();
-              object_speeds[object_lane].push_back(object_speed);
-              if((object_lane == car_lane)
-                  && (object_s > car_s)
-                  && (object_s - car_s < FOLLOWING_GAP)) {
+          // check lane speeds, including slower vehicle ahead
+          vector<double> lane_speeds(N_LANES);
+          for(int lane = 0; lane < N_LANES; ++lane)
+          {
+            Vehicle target;
+            lane_speeds[lane] = ROAD_SPEED_LIMIT;
+            if(ego.get_vehicle_ahead(tracked_objects, lane, target)) {
+              lane_speeds[lane] = target.speed;
+              if((lane == ego.lane) && (target.s - ego.projected_s < FOLLOWING_GAP))
+              {
                 too_close = true;
               }
             }
           }
 
-          // compute average speed of all detected object vehicles in each lane
-          vector<double> lane_speeds(N_LANES);
-          for(int lane = 0; lane < N_LANES; lane++) {
-            if(object_speeds[lane].empty()) {
-              lane_speeds[lane] = SPEED_LIMIT;
-            } else {
-              // compute average speed from all objects in lane
-              lane_speeds[lane] = std::accumulate(object_speeds[lane].begin(),
-                                                 object_speeds[lane].end(), 0)
-                                 / object_speeds[lane].size();
-            }
+          if(too_close)
+          {
+            ego.slow_down();
           }
-          
-          // Control acceleration (smooth transition between set speeds)
-          if(too_close) {   // slow down
-            car_goal_speed -= SPEED_INCREMENT;
-          } else if(car_goal_speed < SPEED_LIMIT) {
-            car_goal_speed += SPEED_INCREMENT;  // speed up to speed limit
+          else
+          {
+            ego.speed_up();
           }
 
           // determine best path to plan
-          vector<BehaviorState> next_states = successor_states(car_state, car_lane);
-          float best_cost = FLT_MAX;
-          BehaviorState best_state = car_state;
-          for(auto& state : next_states) {
-            // cost based on lane speeds
-            float speed_cost = inefficiency_cost(SPEED_LIMIT,
-                                                car_lane + intended_lane(state),
-                                                car_lane + final_lane(state), 
-                                                lane_speeds);
-            // cost based on collision risk
-            float crash_cost = collision_cost(car_s, car_lane, car_speed,
-                                              car_lane + final_lane(state),
-                                              tracked_objects, prev_size);
-            // cost based on (inverse of) free space in desired final lane
-            float crowding_cost = congestion_cost(car_s,
-                                                  car_lane + final_lane(state),
-                                                  tracked_objects);
-            float cost = speed_cost * pow(10, 6)
-                       + crash_cost * pow(10, 8)
-                       + crowding_cost * pow(10, 5);
-            
-            if(cost < best_cost) {
-              best_cost = cost;
-              best_state = state;
-            }
-          }
-          // std::cout << "best cost: " << best_cost
-          //           << "\t" << print_state(car_state) << "\t->\t" << print_state(best_state)
-          //           << std::endl;
-          car_state = best_state;
+          BehaviorState next_state = ego.choose_next_state(tracked_objects, lane_speeds);
+
+          ego.state = next_state;
 
           // BEGIN Path Planning
 
           // if the previous path list is almost empty, use current car position/pose
           if(prev_size < 2) {
             // use 2 pts for path tangent to car angle
-            double prev_car_x = car_x - cos(car_yaw);
-            double prev_car_y = car_y - sin(car_yaw);
+            double prev_car_x = ego.x - cos(ego.yaw);
+            double prev_car_y = ego.y - sin(ego.yaw);
 
             ptsx.push_back(prev_car_x);
-            ptsx.push_back(car_x);
+            ptsx.push_back(ego.x);
 
             ptsy.push_back(prev_car_y);
-            ptsy.push_back(car_y);
+            ptsy.push_back(ego.y);
           }
           else
           {  // use previous path's end point
@@ -231,8 +187,8 @@ int main() {
 
           // add some evenly spaced points ahead, in frenet coordinates
           for(int i = 0; i < NUM_SPLINE_PTS; ++i) {
-            vector<double> next_wp = getXY(car_s + (i+1)*SPLINE_PTS_SPACING,
-                                          lane_center(car_lane + final_lane(car_state)),
+            vector<double> next_wp = getXY(ego.projected_s + (i+1)*SPLINE_PTS_SPACING,
+                                          lane_center(ego.final_lane(ego.state)),
                                           map_waypoints_s,
                                           map_waypoints_x,
                                           map_waypoints_y);
@@ -262,7 +218,7 @@ int main() {
           double x_add_on = 0;
 
           for(int i = 0; i < PATH_BUFFER_SIZE - previous_path_x.size(); ++i) {
-            double N = target_dist / mph_to_increment(car_goal_speed);
+            double N = target_dist / mph_to_increment(ego.target_speed);
             double x_point = x_add_on + target_x / N;
             double y_point = spline(x_point);
 
