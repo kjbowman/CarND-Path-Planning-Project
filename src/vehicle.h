@@ -28,15 +28,15 @@ public:
     // methods
     void update(double x, double y, double s, double d, double yaw, double speed);
 
-    BehaviorState choose_next_state(vector<Vehicle>& predictions,
+    BehaviorState choose_next_state(vector<Vehicle>& tracked_objects,
                                     vector<double> lane_speeds);
     
     vector<BehaviorState> successor_states();
 
-    bool get_vehicle_ahead(vector<Vehicle>& predictions, int lane,
+    bool get_vehicle_ahead(vector<Vehicle>& tracked_objects, int lane,
                            Vehicle& rVehicle);
     
-    bool get_vehicle_behind(vector<Vehicle>& predictions, int lane,
+    bool get_vehicle_behind(vector<Vehicle>& tracked_objects, int lane,
                             Vehicle& rVehicle);
 
     void slow_down();

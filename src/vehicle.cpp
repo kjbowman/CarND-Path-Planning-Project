@@ -86,26 +86,14 @@ vector<BehaviorState> Vehicle::successor_states()
 
     switch(this->state) {
         case BehaviorState::KL:
-        // next_states.push_back(BehaviorState::PLCL);
-        // next_states.push_back(BehaviorState::PLCR);
-        if(this->lane != LEFT_LANE) {
-            next_states.push_back(BehaviorState::LCL);
-        }
-        if(this->lane != RIGHT_LANE) {
-            next_states.push_back(BehaviorState::LCR);
-        }
-        break;
-
-        case BehaviorState::LCL:
-        if(this->lane != LEFT_LANE) {
-            next_states.push_back(BehaviorState::LCL);
-        }
-        break;
-
-        case BehaviorState::LCR:
-        if(this->lane != RIGHT_LANE) {
-            next_states.push_back(BehaviorState::LCR);
-        }
+        next_states.push_back(BehaviorState::PLCL);
+        next_states.push_back(BehaviorState::PLCR);
+        // if(this->lane != LEFT_LANE) {
+        //     next_states.push_back(BehaviorState::LCL);
+        // }
+        // if(this->lane != RIGHT_LANE) {
+        //     next_states.push_back(BehaviorState::LCR);
+        // }
         break;
 
         case BehaviorState::PLCL:
@@ -122,6 +110,18 @@ vector<BehaviorState> Vehicle::successor_states()
         }
         break;
 
+        case BehaviorState::LCL:
+        if(this->lane != LEFT_LANE) {
+            next_states.push_back(BehaviorState::LCL);
+        }
+        break;
+
+        case BehaviorState::LCR:
+        if(this->lane != RIGHT_LANE) {
+            next_states.push_back(BehaviorState::LCR);
+        }
+        break;
+
         default:    // unreachable
         break;
     }
@@ -129,12 +129,12 @@ vector<BehaviorState> Vehicle::successor_states()
     return next_states;
 }
 
-bool Vehicle::get_vehicle_ahead(vector<Vehicle>& predictions, int lane,
+bool Vehicle::get_vehicle_ahead(vector<Vehicle>& tracked_objects, int lane,
                                 Vehicle& rVehicle)
 {
     bool found = false;
     double min_distance = FLT_MAX;
-    for(auto& obj : predictions)
+    for(auto& obj : tracked_objects)
     {
         if(obj.lane == lane && obj.s > this->s)
         {
@@ -150,12 +150,12 @@ bool Vehicle::get_vehicle_ahead(vector<Vehicle>& predictions, int lane,
     return found;
 }
 
-bool Vehicle::get_vehicle_behind(vector<Vehicle>& predictions, int lane,
+bool Vehicle::get_vehicle_behind(vector<Vehicle>& tracked_objects, int lane,
                                  Vehicle& rVehicle)
 {
     bool found = false;
     double min_distance = FLT_MAX;
-    for(auto& obj : predictions)
+    for(auto& obj : tracked_objects)
     {
         if(obj.lane == lane && obj.s < this->s)
         {
