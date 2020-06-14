@@ -3,9 +3,11 @@
 
 #include <map>
 #include <vector>
+#include <string>
 
 using std::map;
 using std::vector;
+using std::string;
 
 enum class BehaviorState
 {
@@ -16,17 +18,20 @@ enum class BehaviorState
     PLCR    // Prepare Lane Change Right
 };
 
-class Vehicle {
+class Vehicle
+{
 public:
     // constructors
     Vehicle();
-    Vehicle(int id, double x, double y, double s, double d, double yaw, double speed);
+    Vehicle(int id, double x, double y, double s, double d,
+            double yaw, double speed);
     
     // destructor
     virtual ~Vehicle() {};
 
     // methods
-    void update(double x, double y, double s, double d, double yaw, double speed);
+    void update(double x, double y, double s, double d,
+                double yaw, double speed);
 
     BehaviorState choose_next_state(vector<Vehicle>& tracked_objects,
                                     vector<double> lane_speeds);
@@ -39,9 +44,15 @@ public:
     bool get_vehicle_behind(vector<Vehicle>& tracked_objects, int lane,
                             Vehicle& rVehicle);
 
-    void slow_down();
+    void slow_down(double increment);
 
-    void speed_up();
+    void speed_up(double increment);
+
+    int intended_lane(BehaviorState state);
+
+    int final_lane(BehaviorState state);
+
+    string state_string();
 
     map<BehaviorState, int> lane_direction = 
     {
@@ -65,8 +76,6 @@ public:
     double projected_s, projected_d;
     double projected_lane;
 
-    int intended_lane(BehaviorState state);
-    int final_lane(BehaviorState state);
 };
 
 #endif  // VEHICLE_H

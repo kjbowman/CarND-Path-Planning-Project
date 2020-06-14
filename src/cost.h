@@ -4,10 +4,6 @@
 #include "vehicle.h"
 
 
-float calculate_cost(const Vehicle& vehicle,
-                     const vector<Vehicle>& predictions,
-                     const vector<Vehicle>& trajectory);
-
 float inefficiency_cost(double target_speed, int intended_lane, int final_lane,
                           const vector<double>& lane_speeds);
 

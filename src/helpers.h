@@ -54,17 +54,4 @@ double lane_center(int lane);
 
 int which_lane(double d);
 
-/* 
-string print_state(BehaviorState state) {
-  string out = "?";
-  switch(state) {
-    case BehaviorState::KL:   out = "KL";   break;
-    case BehaviorState::PLCL: out = "PLCL"; break;
-    case BehaviorState::PLCR: out = "PLCR"; break;
-    case BehaviorState::LCL:  out = "LCL";  break;
-    case BehaviorState::LCR:  out = "LCR";  break;
-  }
-  return out;
-}
- */
 #endif  // HELPERS_H

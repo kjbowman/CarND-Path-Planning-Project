@@ -3,11 +3,11 @@
 
 // simulator/model parameters
 constexpr unsigned N_LANES = 3;
-constexpr unsigned LEFT_LANE = 0;           // midside lane
+constexpr unsigned LEFT_LANE = 0;           // midside lane (near double line)
 constexpr unsigned RIGHT_LANE = N_LANES-1;  // outside lane
 constexpr double LANE_WIDTH = 4.0;          // [m]
 constexpr double SIMULATOR_CYCLE_TIME = 0.02;    // [s] (20 ms)
-constexpr double UPDATE_RATE = 1 / SIMULATOR_CYCLE_TIME;    // [Hz] (20 ms => 50 Hz)
+constexpr double UPDATE_RATE = 1 / SIMULATOR_CYCLE_TIME;    // [Hz] (50 Hz)
 
 // conversion constants
 constexpr double METERS_PER_MILE = 1609.3;
@@ -23,11 +23,13 @@ constexpr double MAX_LANE_CHANGE_TIME = 3.0;  // [s]
 constexpr int PATH_BUFFER_SIZE = 30;  // 50
 constexpr int NUM_SPLINE_PTS = 4;
 constexpr double SPLINE_PTS_SPACING = 30.0;   // [m]
-constexpr double CAR_LENGTH = 5.0;            // [m] (a guess based on avg car length)
-constexpr double FOLLOWING_GAP = CAR_LENGTH * 3;        // [m]
-constexpr double CUTIN_GAP = CAR_LENGTH * 2;            // [m]
+constexpr double CAR_LENGTH = 4.5;            // [m] (based on avg mid-size car)
+constexpr double FOLLOWING_GAP = CAR_LENGTH * 2.5;
+constexpr double CUTIN_GAP = CAR_LENGTH * 2;
 constexpr double SPEED_LIMIT = ROAD_SPEED_LIMIT - 0.5;  // [mph]
-constexpr double SPEED_INCREMENT = 0.25;      // [mph/update_rate]
+constexpr double SPEED_INCREMENT = 0.25;                // [mph/update_rate]
+constexpr double LOOK_AHEAD = 500;      // [m]
+constexpr double LOOK_BEHIND = 500;     // [m]
 
 // Sensor fusion list indexes
 constexpr int SF_ID = 0;

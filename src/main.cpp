@@ -134,26 +134,28 @@ int main() {
             lane_speeds[lane] = ROAD_SPEED_LIMIT;
             if(ego.get_vehicle_ahead(tracked_objects, lane, target)) {
               lane_speeds[lane] = target.speed;
-              if((lane == ego.lane) && (target.s - ego.projected_s < FOLLOWING_GAP))
-              {
-                too_close = true;
+              if(lane == ego.lane) {
+                double gap = target.s - ego.projected_s;
+                if(gap < FOLLOWING_GAP) {
+                  too_close = true;
+                }
               }
             }
           }
 
+          // determine best path to plan
+          ego.state = ego.choose_next_state(tracked_objects, lane_speeds);
+
+          // std::cout << "State: " << ego.state_string() << std::endl;
+
           if(too_close)
           {
-            ego.slow_down();
+            ego.slow_down(SPEED_INCREMENT/2);
           }
           else
           {
-            ego.speed_up();
+            ego.speed_up(SPEED_INCREMENT);
           }
-
-          // determine best path to plan
-          BehaviorState next_state = ego.choose_next_state(tracked_objects, lane_speeds);
-
-          ego.state = next_state;
 
           // BEGIN Path Planning
 
