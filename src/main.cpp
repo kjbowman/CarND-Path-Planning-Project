@@ -135,9 +135,17 @@ int main() {
             if(ego.get_vehicle_ahead(tracked_objects, lane, target)) {
               lane_speeds[lane] = target.speed;
               if(lane == ego.lane) {
-                double gap = target.s - ego.projected_s;
-                if(gap < FOLLOWING_GAP) {
-                  too_close = true;
+                // double gap = target.s - ego.projected_s;
+                // if(gap < FOLLOWING_GAP) {
+                //   too_close = true;
+                double delta_v = target.speed - ego.speed;
+                double delta_s = target.projected_s - ego.projected_s;
+                if(delta_v < 0) {
+                  // if target is slower and time_gap is too small
+                  double time_gap = fabs(delta_s / delta_v);
+                  if(time_gap < FOLLOWING_TIME_GAP) {
+                    too_close = true;
+                  }
                 }
               }
             }
@@ -150,7 +158,7 @@ int main() {
 
           if(too_close)
           {
-            ego.slow_down(SPEED_INCREMENT/2);
+            ego.slow_down(SPEED_INCREMENT);
           }
           else
           {

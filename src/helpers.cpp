@@ -157,7 +157,7 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s,
 
 // convert speed in mph to a distance increment, based on 50Hz update rate
 double mph_to_increment(double mph) {
-  return mph * (METERS_PER_MILE/SECONDS_PER_HOUR) / UPDATE_RATE;
+  return mph * MPH_TO_M_PER_CYC;
 }
 
 // get the d-coordinate of the center of lane for a given lane

@@ -1,5 +1,35 @@
 # CarND-Path-Planning-Project
 Self-Driving Car Engineer Nanodegree Program
+
+## Building and Running the Code
+See the original README from Udacity, copied below, for instructions on building and running the code. Note, however, that `CMakeLists.txt` has been modified from the original in order to buld the project from several separately compiled source files, rather than the single `main.cpp` source file provided with the project.
+
+## Overview
+
+## [Rubric](https://review.udacity.com/#!/rubrics/1971/view) Points
+### Compilation
+#### The code compiles correctly
+
+### Valid Trajectories
+#### The car is able to drive at least 4.32 miles without incident
+
+#### The car obeys the speed limit
+
+#### Max acceleration and jerk are not exceeded
+
+#### The car does not have any collisions
+
+#### The car stays in its lane except while changing lanes
+
+#### The car is able to change lanes
+
+### Reflection
+
+
+# --- UDacity's Original README is below ---
+
+# CarND-Path-Planning-Project
+Self-Driving Car Engineer Nanodegree Program
    
 ### Simulator.
 You can download the Term3 Simulator which contains the Path Planning Project from the [releases tab (https://github.com/udacity/self-driving-car-sim/releases/tag/T3_v1.2).  

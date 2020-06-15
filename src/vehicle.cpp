@@ -68,10 +68,10 @@ BehaviorState Vehicle::choose_next_state(vector<Vehicle>& tracked_objects,
                                           final_lane(s),
                                           tracked_objects);
         // cost based on (inverse of) free space in desired final lane
-        float crowding_cost = congestion_cost(this->projected_s,
+        float crowding_cost = congestion_cost(*this,
                                               final_lane(s),
                                               tracked_objects);
-        float cost = speed_cost * pow(10, 5)
+        float cost = speed_cost * pow(10, 4)
                     + crash_cost * pow(10, 8)
                     + crowding_cost * pow(10, 6);
         

@@ -61,7 +61,7 @@ float collision_cost(double ego_s, int ego_lane, double ego_speed,
 }
 
 // Assign a penalty for lanes with less free space before an obstructing vehicle
-float congestion_cost(double ego_s, int lane,
+float congestion_cost(const Vehicle& ego, int lane,
                        const vector<Vehicle> tracked_objects)
 {
     float cost = 0.0;
@@ -71,9 +71,11 @@ float congestion_cost(double ego_s, int lane,
     {
         if(obj.lane == lane)
         {
-            if((obj.s > ego_s) and (obj.s - ego_s < distance))
-            {
-                distance = obj.s - ego_s;
+            if(obj.projected_s > ego.projected_s) {
+                double gap = obj.projected_s - ego.projected_s;
+                if(gap < distance) {
+                    distance = gap;
+                }
             }
         }
         cost = 1 / distance;
