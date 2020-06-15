@@ -76,7 +76,7 @@ The source code is divided into four "modules":
 - [`main.cpp`](./src/main.cpp)  the boilerplate code for the main simulation loop
 - [`vehicle.cpp`](./src/vehicle.cpp) implementation of a [`Vehicle` class](./src/vehicle.h#21) for encapsulating vehicle state ([`vehicle.h`](./src/vehicle.h) contains the definition)
 - [`cost.cpp`](./src/cost.cpp)  functions for computing the "cost" of a given path ([`cost.h`](./src/cost.h) contains the function prototypes)
-- `helpers.cpp` refactored from the supplied [`helpers.h`](./src/helpers.h) (which remains to define the interfaces/function prototypes) to separate interface and implementation
+- [`helpers.cpp`](./src/helpers.cpp) refactored from the supplied [`helpers.h`](./src/helpers.h) (which remains to define the interfaces/function prototypes) to separate interface and implementation
 
 In addition, the file [`parameters.h`](./src/parameters.h) contains symbolic constants to aid in readability and to provide a conventient common location to adjust tuning parameters affecting the performance of the path planning algorithm.
 
