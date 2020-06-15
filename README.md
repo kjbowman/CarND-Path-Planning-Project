@@ -1,34 +1,116 @@
 # CarND-Path-Planning-Project
+
 Self-Driving Car Engineer Nanodegree Program
 
 ## Building and Running the Code
+
 See the original README from Udacity, copied below, for instructions on building and running the code. Note, however, that `CMakeLists.txt` has been modified from the original in order to buld the project from several separately compiled source files, rather than the single `main.cpp` source file provided with the project.
 
 ## Overview
 
 ## [Rubric](https://review.udacity.com/#!/rubrics/1971/view) Points
+
 ### Compilation
+
 #### The code compiles correctly
 
 ### Valid Trajectories
+
 #### The car is able to drive at least 4.32 miles without incident
+
+In numerous tests, the car consistently drove more than 4.32 miles without incident. The best run achieved over 50 miles without incident before the simulation was manually terminated, as evidenced by the screen capture below. In the simulation shown, the average speed over the 1 hour and 6 minutes was ust over 45 mph.
+![Simulation at 50 miles](images/simulation_50miles.png)
 
 #### The car obeys the speed limit
 
+The car never exceeds the 50 mph speed limit. The configured maximum speed for the car is configured to be 49.5 mph.
+
 #### Max acceleration and jerk are not exceeded
+
+The magnitude of total acceleration rarely exceeds 7 m/s^2, staying below the maximum allowable 10 m/s^2. Likewise, the maximum jerk (up to 10 m/s^3 is allowed) is never exceeded. The magnitude of jerk mostly stays below 3 m/s^3.
 
 #### The car does not have any collisions
 
+The car avoids collisions by maintaining safe distance margins while following a slower vehicle and when changing lanes. In addition, a high cost is assigned to paths that might result in a collision.
+
 #### The car stays in its lane except while changing lanes
+
+The car is never outside a lane (or between lanes) for more than 3 seconds. The car always drives in one of the three lanes on the right side of the double line (i.e. it does not cross into oncoming traffic, nor does it leave the road by driving on the shoulder).
 
 #### The car is able to change lanes
 
+The car is able to - and does - change lanes. The image below shows the car beginning a lane change from the left lane to the center lane.
+![Changing lanes](images/lane_change.png)
+
 ### Reflection
 
+#### Implementation
 
-# --- UDacity's Original README is below ---
+##### Code Structure
+
+The source code is divided into four "modules":
+
+- `main.cpp`  the boilerplate code for the main simulation loop
+- `vehicle.cpp` implementation of a `Vehicle` class for encapsulating vehicle state (`vehicle.h` contains the definition)
+- `cost.cpp`  functions for computing the "cost" of a given path (`cost.h` contains the function prototypes)
+- `helpers.cpp` refactored from the supplied `helpers.h` (which remains to define the interfaces/function prototypes) to separate interface and implementation
+
+In addition, the file `parameters.h` contains symbolic constants to aid in readability and to provide a conventient common location to adjust tuning parameters affecting the performance of the path planning algorithm.
+
+##### Overview of the simulation loop
+
+`main.cpp` contains the main simulation loop (lines 64 - 262). The real work begins at line 84 (everything before line 84 is boilerplace code for communicating with the simulator). The main loop executes the following steps:
+
+1. Retrieve the ego vehicle state from the simulator (lines 84 - 92).
+2. Retrieve the sensed environment (list of other vehicles as "tracked objects") from the simulator (lines 95 - 104).
+3. Compute the projected state of the ego vehicle and the tracked objects (lines 115 - 123).
+4. Check for vehicles obstructing the lane(s) ahead of the ego vehicle, if necessary, adjust the ego vehicle's speed to maintain a minimum time gap to the vehicle directly in front of it (lines 125 - 150, 157 - 164).
+5. Choose the vehicle state for the next simulation cycle (line 153).
+6. Construct or extend the planned path (lines 169 - 243). This portion of the code simply performs the mechanics of computing points ((x,y) coordinates) along a spline, using the suggested spline library.
+
+##### Path Planning and Generation
+
+Step 5, above, is modeled on the _Implement Behavior Planner in C++_ quiz from the classroom.The code for selecting the next best state resides in `vehicle.cpp`. The method `choose_next_state` (lines 52 - 85) gets a list of possible next states and computes a "cost" for each one. The state with the lowest cost is chosen as the next state.
+
+There are three cost functions in `cost.cpp`:
+
+- `inefficiency_cost` (lines 13 - 22), adapted from the _Implement a Second Cost Function in C++_ lesson, penalizes travelling in a slower lane.
+- `collision_cost` (lines 26 -61) assigns a penalty for a collision or "near collision" when attempting to change lanes. This cost decreases as the gap between a leading and a following car in the intended lane increases.
+- `congestion_cost` (lines 64 - 84) assigns a cost based on the distance to a potential leading vehicle in the intended lane. This cost increases as the "buffer" distance decreases and is intended to favor paths that will allow the ego vehicle to progress further down the road.
+
+The three costs are computed and weighted in `choose_next_state` (`vehicle.cpp` line 74). The cost of a collision is given the highest weight while the inefficiency cost is weighted the least. While it seems obvious that the collision cost should be the most important, the relative weights for inefficiency and crowding were determined experimentally by observing the planning behavior in numerous simulations.
+
+The generation of the chosen path is inspired almost entirely by the _Project Q&A_, using the spline library to generate a smooth path that either follows the center line of the current lane (for lane keeping) or transitions from the current lane into the next lane. The performance of the generated path (i.e. limiting acceleration and jerk) was tuned through extensive experimentation. This is where having all the important parameters defined in one place (`parameters.h`) became extremely beneficial. The following excerpt shows the final tuned values for the various performance-related parameters:
+```
+#ifndef PARAMETERS_H
+#define PARAMETERS_H
+...
+constexpr int PATH_BUFFER_SIZE = 30;
+constexpr int NUM_SPLINE_PTS = 3;
+constexpr double SPLINE_PTS_SPACING = 30.0;     // [m]
+constexpr double CAR_LENGTH = 4.5;              // [m] (based on avg mid-size car)
+constexpr double FOLLOWING_GAP = CAR_LENGTH * 2.5;
+constexpr double FOLLOWING_TIME_GAP = 1.0;      // [s]
+constexpr double CUTIN_GAP = CAR_LENGTH * 2;
+constexpr double SPEED_LIMIT = ROAD_SPEED_LIMIT - 0.5;  // [mph]
+constexpr double SPEED_INCREMENT = 0.25;                // [mph/update_rate]
+constexpr double LOOK_AHEAD = 500;      // [m]
+constexpr double LOOK_BEHIND = 500;     // [m]
+...
+```
+
+#### Conclusion
+
+---
+
+<p style="text-align: center;">
+<b>UDacity's Original README is below</b>
+</p>
+
+---
 
 # CarND-Path-Planning-Project
+
 Self-Driving Car Engineer Nanodegree Program
    
 ### Simulator.

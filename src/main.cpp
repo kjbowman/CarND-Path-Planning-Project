@@ -59,8 +59,6 @@ int main() {
 
   // initial car variables
   Vehicle ego;
-  // double car_goal_speed = 0;   // target velocity [mph]
-  // BehaviorState car_state = BehaviorState::KL;  // state for FSM
 
   // this huge "lambda" function is the "main loop"
   h.onMessage([&ego, &map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
