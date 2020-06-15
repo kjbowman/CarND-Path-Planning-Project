@@ -1,6 +1,7 @@
 # CarND-Path-Planning-Project
 
 Udacity Self-Driving Car Engineer Nanodegree Program
+
 [![Udacity - Self-Driving Car NanoDegree](https://camo.githubusercontent.com/5b9aa393f43d7bb9cc6277140465f5625f2dae7c/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f756461636974792d7364632f6769746875622f736869656c642d6361726e642e737667)](http://www.udacity.com/drive) 
 
 ## Building and Running the Code
@@ -48,7 +49,7 @@ The car never exceeds the 50 mph speed limit. The configured maximum speed for t
 
 #### Max acceleration and jerk are not exceeded
 
-The magnitude of total acceleration rarely exceeds 7 m/s^2, staying below the maximum allowable 10 m/s^2. Likewise, the maximum jerk (up to 10 m/s^3 is allowed) is never exceeded. The magnitude of jerk mostly stays below 3 m/s^3.
+The magnitude of total acceleration rarely exceeds 7 m/s<sup>2</sup>, staying below the maximum allowable 10 m/s<sup>2</sup>. Likewise, the maximum jerk (up to 10 m/s<sup>3</sup> is allowed) is never exceeded. The magnitude of jerk mostly stays below 3 m/s<sup>3</sup>.
 
 #### The car does not have any collisions
 
