@@ -156,7 +156,7 @@ int main() {
 
           if(too_close)
           {
-            ego.slow_down(SPEED_INCREMENT * 0.25);
+            ego.slow_down(SPEED_INCREMENT);
           }
           else
           {
