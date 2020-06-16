@@ -58,7 +58,7 @@ int main() {
   }
 
   // initial car variables
-  Vehicle ego;
+  Vehicle ego = Vehicle();
 
   // this huge "lambda" function is the "main loop"
   h.onMessage([&ego, &map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
@@ -156,7 +156,7 @@ int main() {
 
           if(too_close)
           {
-            ego.slow_down(SPEED_INCREMENT);
+            ego.slow_down(SPEED_INCREMENT * 0.25);
           }
           else
           {
@@ -261,7 +261,8 @@ int main() {
     }  // end websocket if
   }); // end h.onMessage
 
-  h.onConnection([&h](uWS::WebSocket<uWS::SERVER> ws, uWS::HttpRequest req) {
+  h.onConnection([&ego, &h](uWS::WebSocket<uWS::SERVER> ws, uWS::HttpRequest req) {
+    ego.reset();
     std::cout << "Connected!!!" << std::endl;
   });
 
