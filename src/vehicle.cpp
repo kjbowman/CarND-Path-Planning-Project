@@ -49,6 +49,12 @@ void Vehicle::update(double x, double y, double s, double d,
     this->projected_lane = this->lane;
 }
 
+void Vehicle::reset()
+{
+    state =  BehaviorState::KL;
+    target_speed = 0;
+}
+
 BehaviorState Vehicle::choose_next_state(vector<Vehicle>& tracked_objects,
                                          vector<double> lane_speeds)
 {
