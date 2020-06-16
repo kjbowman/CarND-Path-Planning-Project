@@ -2,7 +2,7 @@
 
 Udacity Self-Driving Car Engineer Nanodegree Program
 
-[![Udacity - Self-Driving Car NanoDegree](https://camo.githubusercontent.com/5b9aa393f43d7bb9cc6277140465f5625f2dae7c/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f756461636974792d7364632f6769746875622f736869656c642d6361726e642e737667)](http://www.udacity.com/drive) 
+[![Udacity - Self-Driving Car NanoDegree](https://camo.githubusercontent.com/5b9aa393f43d7bb9cc6277140465f5625f2dae7c/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f756461636974792d7364632f6769746875622f736869656c642d6361726e642e737667)](http://www.udacity.com/drive)
 
 ## Building and Running the Code
 
@@ -91,9 +91,13 @@ In addition, the file [`parameters.h`](./src/parameters.h) contains symbolic con
 5. Choose the vehicle state for the next simulation cycle ([line 153](./src/main.cpp#L153)).
 6. Construct or extend the planned path ([lines 169 - 243](./src/main.cpp#L169)). This portion of the code simply performs the mechanics of computing points ((x,y) coordinates) along a spline, using the suggested spline library.
 
+###### Restarting the Simulator
+
+Stopping and restarting the simulator (without completely closing the simulator program) does not itself reset the planner. When the simulator is restarted, the simulation begins with the ego vehicle in its last state (position, speed, etc.). To address this problem, I added code to reset the ego vehicle state in the 'onConnection()' callback function ([`main.cpp`, line 265](./src/main.cpp#L65)). Whenever a new connection is established with the simulator, the 'onConnection()' callback is invoked and the ego vehicle is reset to its initial state, starting from standstill ([`Vehicle::reset()`](./src/vehicle.cpp#L52)).
+
 ##### Path Planning and Generation
 
-Step 5, above, is modeled on the **_Implement Behavior Planner in C++_** quiz from the classroom.The code for selecting the next best state resides in [`vehicle.cpp`](./src/vehicle.cpp). The method `choose_next_state()` ([lines 52 - 85](./src/vehicle.cpp#L52)) gets a list of possible next states and computes a "cost" for each one. The state with the lowest cost is chosen as the next state.
+Step 5, above, is modeled on the **_Implement Behavior Planner in C++_** quiz from the classroom.The code for selecting the next best state resides in [`vehicle.cpp`](./src/vehicle.cpp). The method `choose_next_state()` ([lines 58 - 90](./src/vehicle.cpp#L58)) gets a list of possible next states and computes a "cost" for each one. The state with the lowest cost is chosen as the next state.
 
 There are three cost functions in [`cost.cpp`](./src/cost.cpp):
 
@@ -101,7 +105,7 @@ There are three cost functions in [`cost.cpp`](./src/cost.cpp):
 - `collision_cost()` ([lines 26 -61](./src/cost.cpp#L26)) assigns a penalty for a collision or "near collision" when attempting to change lanes. This cost decreases as the gap between a leading and a following car in the intended lane increases.
 - `congestion_cost()` ([lines 64 - 84](./src/cost.cpp#L64)) assigns a cost based on the distance to a potential leading vehicle in the intended lane. This cost increases as the "buffer" distance decreases and is intended to favor paths that will allow the ego vehicle to progress further down the road.
 
-The three costs are computed and weighted in `choose_next_state` (`vehicle.cpp` [line 74](./src/vehicle.cpp#L74)). The cost of a collision is given the highest weight while the inefficiency cost is weighted the least. While it seems obvious that the collision cost should be the most important, the relative weights for inefficiency and crowding were determined experimentally by observing the planning behavior in numerous simulations.
+The three costs are computed and weighted in `choose_next_state` (`vehicle.cpp` [line 80](./src/vehicle.cpp#L80)). The cost of a collision is given the highest weight while the inefficiency cost is weighted the least. While it seems obvious that the collision cost should be the most important, the relative weights for inefficiency and crowding were determined experimentally by observing the planning behavior in numerous simulations.
 
 The generation of the chosen path is inspired almost entirely by the **_Project Q&A_**, using the spline library to generate a smooth path that either follows the center line of the current lane (for lane keeping) or transitions from the current lane into the next lane. The performance of the generated path (i.e. limiting acceleration and jerk) was tuned through extensive experimentation. This is where having all the important parameters defined in one place ([`parameters.h`](./src/parameters.h)) became extremely beneficial. The [following excerpt](./src/parameters.h#L24) shows the final tuned values for the various performance-related parameters:
 
@@ -113,16 +117,17 @@ constexpr double SPLINE_PTS_SPACING = 30.0;     // [m]
 constexpr double CAR_LENGTH = 4.5;              // [m] (based on avg mid-size car)
 constexpr double FOLLOWING_GAP = CAR_LENGTH * 2.5;
 constexpr double FOLLOWING_TIME_GAP = 1.0;      // [s]
-constexpr double CUTIN_GAP = CAR_LENGTH * 2;
+constexpr double CUTIN_GAP = CAR_LENGTH * 1.5;
 constexpr double SPEED_LIMIT = ROAD_SPEED_LIMIT - 0.5;  // [mph]
 constexpr double SPEED_INCREMENT = 0.25;                // [mph/update_rate]
-constexpr double LOOK_AHEAD = 500;      // [m]
-constexpr double LOOK_BEHIND = 500;     // [m]
+constexpr double LOOK_AHEAD = 300;      // [m]
+constexpr double LOOK_BEHIND = 100;     // [m]
+constexpr double MIN_LANE_CHANGE_SPEED = 30;    // [mph]
 ```
 
 #### Conclusion
 
-The implemented path planner performs well enough to meet the project requirements, proven by simulating over 50 miles of incident-free driving. Real-world driving, however, would require further improvements and a **lot** more testing. 
+The implemented path planner performs well enough to meet the project requirements, proven by simulating over 50 miles of incident-free driving. Real-world driving, however, would require further improvements and a **lot** more testing.
 
 ##### Room for improvement
 
